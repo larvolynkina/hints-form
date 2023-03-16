@@ -1,11 +1,14 @@
-class HintsForm {
+class HintsForm extends HTMLElement {
   constructor() {
+    super();
+    this.token = "512d044a8fdb1659ac2e0104d9dd5963e8c0e943"; // replace with your token
     this.query = "";
-    // add token
-    this.token = "512d044a8fdb1659ac2e0104d9dd5963e8c0e943";
+    this.hintsForm = null;
     this.suggestionsBlock = null;
     this.suggestionsData = [];
+    this.suggestionsMessage = null;
     this.organization = null;
+    this.rendered = false;
     this.rowsData = [
       {
         label: "Краткое наименование",
@@ -42,12 +45,13 @@ class HintsForm {
       });
       const result = await response.json();
       const suggestionsData = this.dataAdapter(result.suggestions);
-      this.addSuggestionsBlock(suggestionsData);
+      this.addSuggestionsList(suggestionsData);
     } catch (error) {
-      console.log(error);
+      console.log(error); // add your error handling
     }
   }
 
+  // get necessary data from response
   dataAdapter(data) {
     const adaptedData = [];
     data.forEach((item) => {
@@ -64,7 +68,13 @@ class HintsForm {
     return adaptedData;
   }
 
-  addSuggestionsBlock(data) {
+  addSuggestionsList(data) {
+    if (!data.length) {
+      this.suggestionsMessage.textContent = "Неизвестная организация";
+    } else {
+      this.suggestionsMessage.textContent =
+        "Выберите вариант или продолжите ввод";
+    }
     const suggestions = this.suggestionsBlock;
     const list = suggestions.lastChild;
     list.innerHTML = "";
@@ -87,11 +97,12 @@ class HintsForm {
   }
 
   addOrganizationInfo(data) {
+    const hintsForm = this.hintsForm;
     const { fullName, shortName, inn, kpp, address, title } = data;
-    const fullNameField = document.getElementById("name_full");
-    const shortNameField = document.getElementById("name_short");
-    const addressField = document.getElementById("address");
-    const innKppField = document.getElementById("inn_kpp");
+    const fullNameField = hintsForm.querySelector("#name_full");
+    const shortNameField = hintsForm.querySelector("#name_short");
+    const addressField = hintsForm.querySelector("#address");
+    const innKppField = hintsForm.querySelector("#inn_kpp");
     fullNameField.value = fullName;
     shortNameField.value = shortName;
     addressField.value = address;
@@ -102,49 +113,47 @@ class HintsForm {
   }
 
   updateQueryValue() {
-    const query = document.getElementById("party");
+    const hintsForm = this.hintsForm;
+    const query = hintsForm.querySelector("#party");
     query.value = this.query;
   }
 
   render() {
-    // create container section
-    const containerSection = document.createElement("section");
-    containerSection.className = "container";
+    // create hints-form
+    const hintsForm = document.createElement("div");
+    hintsForm.className = "hints-form";
+    // create container
+    const container = document.createElement("div");
+    container.className = "container";
     const paragraph = document.createElement("p");
     const strong = document.createElement("strong");
     strong.textContent = "Компания или ИП";
     paragraph.appendChild(strong);
-    containerSection.appendChild(paragraph);
+    container.appendChild(paragraph);
     const partyInput = document.createElement("input");
     partyInput.id = "party";
     partyInput.name = "party";
     partyInput.type = "text";
     partyInput.placeholder =
       "Введите название, ИНН, ОГРН или адрес организации";
-    containerSection.appendChild(partyInput);
+    container.appendChild(partyInput);
     const suggestions = document.createElement("div");
     suggestions.className = "suggestions";
     const message = document.createElement("p");
     message.className = "suggestions-message";
     message.textContent = "Выберите вариант или продолжите ввод";
+    this.suggestionsMessage = message;
     suggestions.appendChild(message);
     const list = document.createElement("ul");
-    list.addEventListener("click", (event) => {
-      if (event.target.closest("li").className === "suggestions-item") {
-        this.addOrganizationInfo(
-          this.suggestionsData[+event.target.closest("li").id],
-        );
-      }
-    });
     suggestions.appendChild(list);
     this.suggestionsBlock = suggestions;
-    containerSection.appendChild(suggestions);
-    // create result section
-    const resultSection = document.createElement("section");
-    resultSection.className = "result";
+    container.appendChild(suggestions);
+    // create result
+    const result = document.createElement("div");
+    result.className = "result";
     const typeParagraph = document.createElement("p");
     typeParagraph.id = "type";
-    resultSection.appendChild(typeParagraph);
+    result.appendChild(typeParagraph);
     this.rowsData.forEach((item) => {
       const div = document.createElement("div");
       div.className = "row";
@@ -154,10 +163,20 @@ class HintsForm {
       const input = document.createElement("input");
       input.id = item.id;
       div.appendChild(input);
-      resultSection.appendChild(div);
+      result.appendChild(div);
     });
-    document.body.prepend(resultSection);
-    document.body.prepend(containerSection);
+    this.hintsForm = hintsForm;
+    hintsForm.appendChild(container);
+    hintsForm.appendChild(result);
+
+    // add event Listeners
+    list.addEventListener("mousedown", (event) => {
+      if (event.target.closest("li").className === "suggestions-item") {
+        this.addOrganizationInfo(
+          this.suggestionsData[+event.target.closest("li").id],
+        );
+      }
+    });
 
     partyInput.addEventListener("input", (event) => {
       this.query = event.target.value;
@@ -168,10 +187,8 @@ class HintsForm {
       }
     });
 
-    partyInput.addEventListener("blur", (event) => {
-      setTimeout(() => {
-        this.suggestionsBlock.style.display = "none";
-      }, 100);
+    partyInput.addEventListener("blur", () => {
+      this.suggestionsBlock.style.display = "none";
     });
 
     partyInput.addEventListener("focus", () => {
@@ -179,8 +196,111 @@ class HintsForm {
         this.fetchRelevantResults();
       }
     });
+
+    // activate shadow DOM and add hints form to shadow
+    const shadow = this.attachShadow({ mode: "open" });
+    const style = document.createElement("style");
+
+    style.textContent = `
+    ul,
+    li {
+      margin: 0;
+      padding: 0;
+    }
+    
+    input {
+      font-size: 16px;
+      padding: 4px;
+    }
+
+    .hints-form {
+      max-width: 800px;
+      position: relative;
+    }
+    
+    .result {
+      width: 50%;
+      min-width: 300px;
+      margin-top: 1rem;
+    }
+    
+    .row {
+      margin-bottom: 1rem;
+    }
+    
+    .row label {
+      display: block;
+      min-width: 10em;
+    }
+    
+    .row input,
+    .row textarea,
+    .container input {
+      width: 100%;
+      box-sizing: border-box;
+    }
+    
+    .suggestions {
+      position: absolute;
+      width: 100%;
+      background-color: #fff;
+      z-index: 5;
+      display: none;
+      border: 1px solid gray;
+      border-radius: 3px;
+      box-sizing: border-box;
+    }
+    
+    .suggestions li {
+      padding: 5px 5px;
+      cursor: pointer;
+    }
+    
+    .suggestions li:hover {
+      background-color: #eee;
+    }
+    
+    .suggestions ul {
+      list-style: none;
+    }
+
+    .suggestions-message {
+      font-size: 14px;
+      padding: 5px 5px;
+    }
+
+    .suggestions p {
+      margin: 0;
+    }
+
+    @media screen and (max-width: 360px) {
+
+      input {
+        font-size: 14px;
+      }
+
+      .container input {
+        max-width: 300px;
+      }
+
+      .result {
+        min-width: unset;
+        width: 100%;
+      }
+
+    }
+    `;
+
+    shadow.appendChild(style);
+    shadow.appendChild(hintsForm);
+  }
+
+  connectedCallback() {
+    if (!this.rendered) {
+      this.render();
+      this.rendered = true;
+    }
   }
 }
 
-const form = new HintsForm();
-form.render();
+customElements.define("hints-form", HintsForm);
